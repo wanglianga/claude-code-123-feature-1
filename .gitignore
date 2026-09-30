@@ -44,3 +44,7 @@ temp/
 *debug*
 *temp*
 *tmp*
+
+# 业务文件 ContactAttempt 被上面的 *temp* 子串规则误伤，显式纳入版本管理
+!backend/src/main/java/cn/court/mediation/entity/ContactAttempt.java
+!backend/src/main/java/cn/court/mediation/repository/ContactAttemptRepository.java

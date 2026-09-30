@@ -1,0 +1,9 @@
+services:
+  mediation:
+    build: .
+    image: court-mediation-platform:latest
+    container_name: court-mediation
+    ports:
+      - "8080:8080"
+    # 默认 H2 内存库，零外部依赖；重启后数据由种子程序重新初始化
+    restart: unless-stopped

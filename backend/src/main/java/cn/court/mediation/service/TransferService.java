@@ -30,13 +30,16 @@ public class TransferService {
     private final FollowUpRepository followUpRepository;
     private final DeliveryRepository deliveryRepository;
     private final FaceVerificationRepository faceRepository;
+    private final ContactAttemptRepository contactAttemptRepository;
     private final TimelineService timelineService;
 
     public TransferService(TransferMaterialRepository transferRepository, CaseRepository caseRepository,
                            TimelineRepository timelineRepository, MediationRecordRepository recordRepository,
                            AgreementRepository agreementRepository, PerformancePlanRepository planRepository,
                            FollowUpRepository followUpRepository, DeliveryRepository deliveryRepository,
-                           FaceVerificationRepository faceRepository, TimelineService timelineService) {
+                           FaceVerificationRepository faceRepository,
+                           ContactAttemptRepository contactAttemptRepository,
+                           TimelineService timelineService) {
         this.transferRepository = transferRepository;
         this.caseRepository = caseRepository;
         this.timelineRepository = timelineRepository;
@@ -46,6 +49,7 @@ public class TransferService {
         this.followUpRepository = followUpRepository;
         this.deliveryRepository = deliveryRepository;
         this.faceRepository = faceRepository;
+        this.contactAttemptRepository = contactAttemptRepository;
         this.timelineService = timelineService;
     }
 
@@ -86,8 +90,12 @@ public class TransferService {
             materials.add("7. 履行回访记录");
         }
         materials.add("8. 电子送达记录");
-        if (Boolean.TRUE.equals(c.getRespondentMissing())) {
-            materials.add("9. 被申请人失联情况说明及联系过程记录");
+        List<ContactAttempt> attempts = contactAttemptRepository.findByCaseIdOrderByCreatedAtAsc(caseId);
+        if (!attempts.isEmpty()) {
+            materials.add("9. 被申请人失联联系过程记录（共" + attempts.size()
+                    + "次，逐次标明电话/短信/地址核验/送达尝试及每次结果）");
+        } else if (Boolean.TRUE.equals(c.getRespondentMissing())) {
+            materials.add("9. 被申请人失联情况说明");
         }
         materials.add("10. 转立案审批表");
         tm.setMaterialList(materials.toString());
@@ -205,7 +213,12 @@ public class TransferService {
         sb.append("【分流情况】\n").append(c.getTriageOpinion() == null ? "（无）" : c.getTriageOpinion()).append("\n");
         sb.append("失联情况：").append(Boolean.TRUE.equals(c.getRespondentMissing()) ? "曾登记失联" : "无")
                 .append("；材料缺件：").append(Boolean.FALSE.equals(c.getEvidenceComplete()) ? "未补齐：" + c.getEvidenceGapNote() : "已齐备")
-                .append("；改期次数：").append(c.getRescheduleCount()).append("\n\n");
+                .append("；改期次数：").append(c.getRescheduleCount())
+                .append("；累计联系失败：").append(c.getFailedContactCount() == null ? 0 : c.getFailedContactCount()).append("次")
+                .append("；送达地址核验：").append(Boolean.TRUE.equals(c.getAddressVerified()) ? "已核验" : "未核验")
+                .append("；线下送达：").append(Boolean.TRUE.equals(c.getOfflineDelivery()) ? "已安排" : "未安排")
+                .append("；窗口建议转立案：").append(Boolean.TRUE.equals(c.getTransferSuggested()) ? "是" : "否")
+                .append("\n\n");
 
         List<MediationRecord> records = recordRepository.findByCaseIdOrderByRoundNoDescCreatedAtDesc(c.getId());
         sb.append("【调解笔录】（共").append(records.size()).append("次）\n");
@@ -251,6 +264,30 @@ public class TransferService {
                         .append(f.getResult()).append(" ").append(nz(f.getNote())).append("\n");
             }
             sb.append("\n");
+        }
+
+        List<ContactAttempt> attempts = contactAttemptRepository.findByCaseIdOrderByCreatedAtAsc(c.getId());
+        if (!attempts.isEmpty()) {
+            long failed = attempts.stream().filter(a -> !MissingContactService.isReached(a.getResult())).count();
+            sb.append("【被申请人失联联系过程记录】（共").append(attempts.size())
+                    .append("次，其中失败").append(failed).append("次）\n");
+            DateTimeFormatter af = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            for (ContactAttempt a : attempts) {
+                sb.append("第").append(a.getRoundNo()).append("次 ")
+                        .append(a.getCreatedAt().format(af)).append(" ")
+                        .append(a.getOperatorName()).append(" ")
+                        .append(MissingContactService.methodLabel(a.getMethod())).append("→")
+                        .append("联系信息：").append(a.getContactValue() == null || a.getContactValue().isBlank() ? "（未登记）" : a.getContactValue())
+                        .append("，结果：").append(MissingContactService.resultLabel(a.getResult()));
+                if (a.getNote() != null && !a.getNote().isBlank()) {
+                    sb.append("，说明：").append(a.getNote());
+                }
+                sb.append("\n");
+            }
+            sb.append("窗口处置：送达地址").append(Boolean.TRUE.equals(c.getAddressVerified()) ? "已核验" : "未核验")
+                    .append("，线下送达").append(Boolean.TRUE.equals(c.getOfflineDelivery()) ? "已安排" : "未安排")
+                    .append("，是否建议转立案").append(Boolean.TRUE.equals(c.getTransferSuggested()) ? "是" : "否")
+                    .append("。\n\n");
         }
 
         sb.append("【全流程时间线】（共").append(events.size()).append("条）\n");

@@ -135,6 +135,8 @@ public class StatisticsService {
                 case WINDOW, ADMIN -> {
                     if (c.getStatus() == CaseStatus.PENDING_TRIAGE) {
                         action = "待分流"; tag = "danger";
+                    } else if (Boolean.TRUE.equals(c.getMissingThresholdAlerted())) {
+                        action = "失联达阈值，请核验送达地址"; tag = "danger";
                     } else if (Boolean.TRUE.equals(c.getTransferRequested())
                             && c.getStatus() != CaseStatus.TRANSFERRED) {
                         action = "转立案材料待接收"; tag = "warning";

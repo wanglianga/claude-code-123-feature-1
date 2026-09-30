@@ -32,13 +32,15 @@ public class CaseService {
     private final FollowUpRepository followUpRepository;
     private final FaceVerificationRepository faceRepository;
     private final TransferMaterialRepository transferRepository;
+    private final ContactAttemptRepository contactAttemptRepository;
 
     public CaseService(CaseRepository caseRepository, UserRepository userRepository,
                        TimelineService timelineService, ScheduleRepository scheduleRepository,
                        MediationRecordRepository recordRepository, AgreementRepository agreementRepository,
                        PerformancePlanRepository planRepository, TimelineRepository timelineRepository,
                        DeliveryRepository deliveryRepository, FollowUpRepository followUpRepository,
-                       FaceVerificationRepository faceRepository, TransferMaterialRepository transferRepository) {
+                       FaceVerificationRepository faceRepository, TransferMaterialRepository transferRepository,
+                       ContactAttemptRepository contactAttemptRepository) {
         this.caseRepository = caseRepository;
         this.userRepository = userRepository;
         this.timelineService = timelineService;
@@ -51,6 +53,7 @@ public class CaseService {
         this.followUpRepository = followUpRepository;
         this.faceRepository = faceRepository;
         this.transferRepository = transferRepository;
+        this.contactAttemptRepository = contactAttemptRepository;
     }
 
     @Transactional
@@ -139,10 +142,12 @@ public class CaseService {
         m.put("followUps", followUpRepository.findByCaseIdOrderByFollowUpDateDesc(id));
         m.put("faceVerifications", faceRepository.findByCaseIdOrderByCreatedAtDesc(id));
         m.put("transferMaterial", transferRepository.findByCaseId(id).orElse(null));
+        m.put("contactAttempts", contactAttemptRepository.findByCaseIdOrderByCreatedAtDesc(id));
 
         // 风险标记汇总（供前端红黄提示）
         List<String> risks = new ArrayList<>();
         if (Boolean.TRUE.equals(c.getRespondentMissing())) risks.add("RESPONDENT_MISSING");
+        if (Boolean.TRUE.equals(c.getMissingThresholdAlerted())) risks.add("MISSING_ALERT");
         if (Boolean.FALSE.equals(c.getEvidenceComplete())) risks.add("EVIDENCE_MISSING");
         if (c.getRescheduleCount() != null && c.getRescheduleCount() >= 2) risks.add("REPEAT_RESCHEDULE");
         if (Boolean.TRUE.equals(c.getTransferRequested())) risks.add("TRANSFER_REQUESTED");
@@ -204,6 +209,9 @@ public class CaseService {
             timelineService.record(caseId, "MISSING", "被申请人失联登记",
                     "经多种方式联系未果。" + (note == null ? "" : note), operator);
         } else {
+            // 恢复联系：失败计数与阈值预警一并清除
+            c.setFailedContactCount(0);
+            c.setMissingThresholdAlerted(false);
             timelineService.record(caseId, "MISSING", "恢复与被申请人联系",
                     note == null ? "被申请人已恢复联系" : note, operator);
         }

@@ -29,13 +29,16 @@ public class DataSeeder implements CommandLineRunner {
     private final FollowUpRepository followUpRepository;
     private final DeliveryRepository deliveryRepository;
     private final TransferMaterialRepository transferRepository;
+    private final ContactAttemptRepository contactAttemptRepository;
     private final TimelineService timelineService;
 
     public DataSeeder(UserRepository userRepository, CaseRepository caseRepository,
                       ScheduleRepository scheduleRepository, MediationRecordRepository recordRepository,
                       AgreementRepository agreementRepository, PerformancePlanRepository planRepository,
                       FollowUpRepository followUpRepository, DeliveryRepository deliveryRepository,
-                      TransferMaterialRepository transferRepository, TimelineService timelineService) {
+                      TransferMaterialRepository transferRepository,
+                      ContactAttemptRepository contactAttemptRepository,
+                      TimelineService timelineService) {
         this.userRepository = userRepository;
         this.caseRepository = caseRepository;
         this.scheduleRepository = scheduleRepository;
@@ -45,6 +48,7 @@ public class DataSeeder implements CommandLineRunner {
         this.followUpRepository = followUpRepository;
         this.deliveryRepository = deliveryRepository;
         this.transferRepository = transferRepository;
+        this.contactAttemptRepository = contactAttemptRepository;
         this.timelineService = timelineService;
     }
 
@@ -240,16 +244,45 @@ public class DataSeeder implements CommandLineRunner {
         c9.setChannel(Channel.OFFLINE);
         c9.setRespondentMissing(true);
         c9.setMissingAt(LocalDateTime.now().minusDays(15));
+        c9.setFailedContactCount(3);
         c9.setRescheduleCount(2);
+        c9.setAddressVerified(true);
+        c9.setAddressVerifiedAt(LocalDateTime.now().minusDays(12));
+        c9.setAddressVerifyNote("户籍地社区核实：马某长期在外务工，现住址不详，户籍地可作留置送达地址");
+        c9.setOfflineDelivery(true);
+        c9.setOfflineDeliveryAt(LocalDateTime.now().minusDays(11));
+        c9.setOfflineDeliveryNote("上门留置送达未果，邻居称数月未见本人");
+        c9.setTransferSuggested(true);
+        c9.setTransferSuggestedAt(LocalDateTime.now().minusDays(10));
         c9.setTransferRequested(true);
         c9.setTransferReason("被申请人失联，调解无法进行");
         caseRepository.save(c9);
         timelineService.record(c9.getId(), "TRIAGE", "立案窗口完成分流", "线下调解，张调解员承办。", window);
+        contactAttemptRepository.save(contactAttempt(c9.getId(), 1, "PHONE", "13911110009", "SHUTDOWN",
+                "多次拨打均提示停机", zhang, LocalDateTime.now().minusDays(15)));
+        timelineService.record(c9.getId(), "CONTACT", "第1次联系被申请人（电话联系）",
+                "联系方式：电话联系；联系对象信息：13911110009；联系结果：停机/空号；情况说明：多次拨打均提示停机。累计联系失败1次。", zhang);
+        contactAttemptRepository.save(contactAttempt(c9.getId(), 2, "SMS", "13911110009", "NO_REPLY",
+                "发送排期通知短信，三日未回复", zhang, LocalDateTime.now().minusDays(14)));
+        timelineService.record(c9.getId(), "CONTACT", "第2次联系被申请人（短信联系）",
+                "联系方式：短信联系；联系对象信息：13911110009；联系结果：短信未回复；情况说明：发送排期通知短信，三日未回复。累计联系失败2次。", zhang);
+        contactAttemptRepository.save(contactAttempt(c9.getId(), 3, "ADDRESS_CHECK", "户籍地为本市但长期不在", "NOT_FOUND",
+                "社区核实长期外出，现住址不详", window, LocalDateTime.now().minusDays(13)));
+        timelineService.record(c9.getId(), "CONTACT", "第3次联系被申请人（地址核验）",
+                "联系方式：地址核验；联系对象信息：户籍地为本市但长期不在；联系结果：查无此人/地址不详；情况说明：社区核实长期外出，现住址不详。累计联系失败3次。", window);
+        timelineService.record(c9.getId(), "MISSING", "被申请人失联预警（达阈值）",
+                "经电话、短信、地址核验等多种方式累计联系失败3次（阈值3次），平台已标记被申请人失联，并提醒立案窗口核验送达地址。", null);
+        timelineService.record(c9.getId(), "MISSING", "窗口核验被申请人送达地址",
+                "经窗口核验（社区渠道），送达地址确认为户籍地，可作留置送达地址。", window);
+        timelineService.record(c9.getId(), "MISSING", "电子送达未果，改为线下送达",
+                "立案窗口决定转为线下直接送达/留置送达，上门未果。", window);
+        timelineService.record(c9.getId(), "MISSING", "窗口建议被申请人失联转立案",
+                "经3次联系尝试仍无法联系被申请人，窗口建议按失联情形转立案，前期联系证据自动进入材料包。", window);
         timelineService.record(c9.getId(), "MISSING", "被申请人失联登记",
                 "电话停机、户籍地走访不在、社区反映长期外出，多种方式联系未果。", zhang);
         timelineService.record(c9.getId(), "RESCHEDULE", "第2次改期", "因被申请人无法到庭再次改期，累计2次。", zhang);
         timelineService.record(c9.getId(), "TRANSFER", "生成转立案材料包",
-                "系统自动汇编申请、分流、失联情况、改期记录等连续材料，等待立案窗口接收。", assistant);
+                "系统自动汇编申请、分流、3次联系尝试及每次结果、失联处置、改期记录等连续材料，等待立案窗口接收。", assistant);
         DeliveryRecord d9 = new DeliveryRecord();
         d9.setCaseId(c9.getId());
         d9.setTarget("RESPONDENT");
@@ -264,7 +297,9 @@ public class DataSeeder implements CommandLineRunner {
         tm9.setCaseId(c9.getId());
         tm9.setReasonType("MISSING");
         tm9.setReasonDetail("被申请人失联，调解无法进行");
-        tm9.setMaterialList("1. 诉前调解申请书\n2. 分流意见\n3. 失联情况说明\n4. 排期/改期记录\n5. 转立案审批表");
+        tm9.setMaterialList("1. 诉前调解申请书\n2. 分流意见\n"
+                + "3. 被申请人失联联系过程记录（共3次，逐次标明电话/短信/地址核验及每次结果）\n"
+                + "4. 窗口送达地址核验与线下送达记录\n5. 排期/改期记录\n6. 转立案审批表");
         tm9.setStatus("PREPARED");
         tm9.setPreparedBy(assistant.getId());
         transferRepository.save(tm9);
@@ -447,6 +482,22 @@ public class DataSeeder implements CommandLineRunner {
         p.setNote(note);
         p.setConfirmedBy(confirmedBy);
         return p;
+    }
+
+    private ContactAttempt contactAttempt(Long caseId, int round, String method, String value, String result,
+                                          String note, User operator, LocalDateTime at) {
+        ContactAttempt a = new ContactAttempt();
+        a.setCaseId(caseId);
+        a.setRoundNo(round);
+        a.setMethod(method);
+        a.setContactValue(value);
+        a.setResult(result);
+        a.setNote(note);
+        a.setOperatorId(operator.getId());
+        a.setOperatorName(operator.getRealName());
+        a.setActorRole(operator.getRole().name());
+        a.setCreatedAt(at);
+        return a;
     }
 
     private String date(int deltaDays) {

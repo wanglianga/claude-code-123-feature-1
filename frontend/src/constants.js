@@ -43,6 +43,7 @@ export const CHANNEL = { ONLINE: '线上调解', OFFLINE: '线下调解' }
 
 export const RISK_LABELS = {
   RESPONDENT_MISSING: '被申请人失联',
+  MISSING_ALERT: '失联达阈值·待窗口核验地址',
   EVIDENCE_MISSING: '证据材料缺失',
   REPEAT_RESCHEDULE: '多次改期',
   INSTALLMENT: '分期履行',
@@ -52,11 +53,51 @@ export const RISK_LABELS = {
 
 export const RISK_TAG = {
   RESPONDENT_MISSING: 'danger',
+  MISSING_ALERT: 'danger',
   EVIDENCE_MISSING: 'danger',
   REPEAT_RESCHEDULE: 'warning',
   INSTALLMENT: 'info',
   OVERDUE: 'danger',
   TRANSFER_REQUESTED: 'warning'
+}
+
+// 失联处置：联系尝试方式
+export const CONTACT_METHODS = {
+  PHONE: '电话联系',
+  SMS: '短信联系',
+  ADDRESS_CHECK: '地址核验',
+  DELIVERY: '送达尝试'
+}
+
+// 失联处置：联系结果
+export const CONTACT_RESULTS = {
+  REACHED: '已联系上',
+  NO_ANSWER: '无人接听',
+  SHUTDOWN: '停机/空号',
+  NO_REPLY: '短信未回复',
+  NOT_FOUND: '查无此人/地址不详',
+  REFUSED: '拒收',
+  DELIVERED: '已送达',
+  FAILED: '送达失败'
+}
+
+// 每种方式默认的失败结果
+export const CONTACT_DEFAULT_RESULT = {
+  PHONE: 'NO_ANSWER',
+  SMS: 'NO_REPLY',
+  ADDRESS_CHECK: 'NOT_FOUND',
+  DELIVERY: 'FAILED'
+}
+
+export const CONTACT_RESULT_TAG = {
+  REACHED: 'success',
+  DELIVERED: 'success',
+  NO_ANSWER: 'warning',
+  NO_REPLY: 'warning',
+  SHUTDOWN: 'danger',
+  NOT_FOUND: 'danger',
+  REFUSED: 'danger',
+  FAILED: 'danger'
 }
 
 export const PLAN_STATUS = {

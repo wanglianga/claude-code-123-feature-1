@@ -8,6 +8,15 @@
       <el-tag v-for="r in data.risks" :key="r" size="small" :type="RISK_TAG[r]" class="ml">{{ RISK_LABELS[r] }}</el-tag>
     </div>
 
+    <el-alert v-if="c.missingThresholdAlerted" class="mt" type="error" show-icon :closable="false">
+      <template #title>
+        <div class="alert-line">
+          失联处置预警：被申请人经多次联系失败已达阈值（3 次），请立案窗口核验送达地址。
+          <el-button type="danger" size="small" @click="tab = 'missing'">前往失联处置</el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <el-card shadow="never" class="mt">
       <el-descriptions :column="4" border size="small">
         <el-descriptions-item label="案由">{{ CASE_TYPES[c.caseType] }}</el-descriptions-item>
@@ -45,6 +54,9 @@
         </el-tab-pane>
         <el-tab-pane label="调解与协议" name="mediation">
           <MediationPanel :data="data" @changed="load" />
+        </el-tab-pane>
+        <el-tab-pane label="失联处置" name="missing">
+          <MissingContactPanel :data="data" @changed="load" @go-transfer="tab = 'transfer'" />
         </el-tab-pane>
         <el-tab-pane label="履行与回访" name="performance">
           <PerformancePanel :data="data" @changed="load" />
@@ -131,6 +143,7 @@ import { auth } from '../store.js'
 import { CASE_TYPES, CASE_STATUS, STATUS_TAG, URGENCY, URGENCY_TAG, CHANNEL, RISK_LABELS, RISK_TAG } from '../constants.js'
 import TriageSchedule from './panels/TriageSchedule.vue'
 import MediationPanel from './panels/MediationPanel.vue'
+import MissingContactPanel from './panels/MissingContactPanel.vue'
 import PerformancePanel from './panels/PerformancePanel.vue'
 import TransferPanel from './panels/TransferPanel.vue'
 
@@ -146,7 +159,7 @@ const TYPE_COLOR = {
   SUBMIT: '', TRIAGE: 'primary', SCHEDULE: 'primary', RESCHEDULE: 'warning',
   RECORD: '', AGREEMENT: 'success', SIGN: 'success', FACE: 'success',
   PERFORMANCE: 'success', OVERDUE: 'danger', FOLLOWUP: 'info', TRANSFER: 'warning',
-  DELIVERY: 'info', MISSING: 'danger', EVIDENCE: 'warning'
+  DELIVERY: 'info', MISSING: 'danger', CONTACT: 'warning', EVIDENCE: 'warning'
 }
 const typeOf = t => TYPE_COLOR[t] || ''
 
@@ -212,4 +225,5 @@ const downloadDossier = () => {
 .tl { padding: 12px 8px; }
 .tl-title { font-weight: 600; }
 .tl-detail { color: #606266; font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+.alert-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 600; }
 </style>

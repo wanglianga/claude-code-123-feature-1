@@ -92,6 +92,27 @@ public class MediationCase {
     // ---------- 失联 / 缺材料 标记 ----------
     private Boolean respondentMissing = false;
     private LocalDateTime missingAt;
+
+    /** 累计联系失败次数（电话/短信/地址核验/送达尝试失败均计入，联系上则归零） */
+    private Integer failedContactCount = 0;
+    /** 达到失联预警阈值后，已提醒窗口核验送达地址 */
+    private Boolean missingThresholdAlerted = false;
+    /** 窗口是否已核验被申请人送达地址 */
+    private Boolean addressVerified = false;
+    private LocalDateTime addressVerifiedAt;
+    @Column(length = 500)
+    private String addressVerifyNote;
+    /** 窗口是否已决定转为线下送达 */
+    private Boolean offlineDelivery = false;
+    private LocalDateTime offlineDeliveryAt;
+    @Column(length = 500)
+    private String offlineDeliveryNote;
+    /** 窗口是否已建议转立案（失联处置建议，区别于正式生成材料包） */
+    private Boolean transferSuggested = false;
+    private LocalDateTime transferSuggestedAt;
+    @Column(length = 500)
+    private String transferSuggestNote;
+
     /** 证据材料是否齐备（窗口分流时核验） */
     private Boolean evidenceComplete = true;
     @Column(length = 500)
