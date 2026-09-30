@@ -32,13 +32,15 @@ public class CaseService {
     private final FollowUpRepository followUpRepository;
     private final FaceVerificationRepository faceRepository;
     private final TransferMaterialRepository transferRepository;
+    private final MissingHandleService missingHandleService;
 
     public CaseService(CaseRepository caseRepository, UserRepository userRepository,
                        TimelineService timelineService, ScheduleRepository scheduleRepository,
                        MediationRecordRepository recordRepository, AgreementRepository agreementRepository,
                        PerformancePlanRepository planRepository, TimelineRepository timelineRepository,
                        DeliveryRepository deliveryRepository, FollowUpRepository followUpRepository,
-                       FaceVerificationRepository faceRepository, TransferMaterialRepository transferRepository) {
+                       FaceVerificationRepository faceRepository, TransferMaterialRepository transferRepository,
+                       MissingHandleService missingHandleService) {
         this.caseRepository = caseRepository;
         this.userRepository = userRepository;
         this.timelineService = timelineService;
@@ -51,6 +53,7 @@ public class CaseService {
         this.followUpRepository = followUpRepository;
         this.faceRepository = faceRepository;
         this.transferRepository = transferRepository;
+        this.missingHandleService = missingHandleService;
     }
 
     @Transactional
@@ -139,6 +142,7 @@ public class CaseService {
         m.put("followUps", followUpRepository.findByCaseIdOrderByFollowUpDateDesc(id));
         m.put("faceVerifications", faceRepository.findByCaseIdOrderByCreatedAtDesc(id));
         m.put("transferMaterial", transferRepository.findByCaseId(id).orElse(null));
+        m.put("missingHandle", missingHandleService.summary(c));
 
         // 风险标记汇总（供前端红黄提示）
         List<String> risks = new ArrayList<>();
@@ -164,10 +168,16 @@ public class CaseService {
         if (c.getStatus() != CaseStatus.PENDING_TRIAGE && c.getStatus() != CaseStatus.TRIAGED) {
             throw new BizException("当前状态（" + c.getStatus().getLabel() + "）不能分流");
         }
+        if (body.get("mediatorId") == null) {
+            throw new BizException("请选择承办调解员");
+        }
         Long mediatorId = Long.valueOf(body.get("mediatorId").toString());
         User mediator = userRepository.findById(mediatorId)
                 .filter(u -> u.getRole() == Role.MEDIATOR)
                 .orElseThrow(() -> new BizException("请选择有效的调解员"));
+        if (body.get("channel") == null) {
+            throw new BizException("请选择线上/线下调解方式");
+        }
         Channel channel = Channel.valueOf(body.get("channel").toString());
 
         c.setMediatorId(mediatorId);

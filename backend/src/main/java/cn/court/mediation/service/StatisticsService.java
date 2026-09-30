@@ -135,6 +135,8 @@ public class StatisticsService {
                 case WINDOW, ADMIN -> {
                     if (c.getStatus() == CaseStatus.PENDING_TRIAGE) {
                         action = "待分流"; tag = "danger";
+                    } else if (isAddressVerifyPending(c)) {
+                        action = "被申请人失联达阈值，请核验送达地址"; tag = "danger";
                     } else if (Boolean.TRUE.equals(c.getTransferRequested())
                             && c.getStatus() != CaseStatus.TRANSFERRED) {
                         action = "转立案材料待接收"; tag = "warning";
@@ -184,5 +186,11 @@ public class StatisticsService {
             }
         }
         return Map.of("todos", todos, "today", today.toString());
+    }
+
+    /** 失联联系失败达阈值、已提醒窗口但尚未完成送达地址核验 */
+    private boolean isAddressVerifyPending(MediationCase c) {
+        if (c.getAddressVerifyRemindAt() == null) return false;
+        return c.getAddressVerifiedAt() == null || c.getAddressVerifiedAt().isBefore(c.getAddressVerifyRemindAt());
     }
 }

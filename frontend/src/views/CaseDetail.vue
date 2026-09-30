@@ -28,6 +28,7 @@
       </el-descriptions>
       <div class="quick">
         <el-button size="small" @click="deliverVisible = true"><el-icon><Message /></el-icon>电子送达</el-button>
+        <el-button size="small" @click="tab = 'missing'"><el-icon><PhoneFilled /></el-icon>失联处置</el-button>
         <el-button size="small" @click="downloadDossier"><el-icon><Document /></el-icon>导出连续过程材料卷</el-button>
         <el-button size="small" v-if="auth.is('MEDIATOR','WINDOW','ADMIN')" @click="missingVisible = true">
           <el-icon><Warning /></el-icon>{{ c.respondentMissing ? '恢复联系登记' : '失联登记' }}
@@ -45,6 +46,9 @@
         </el-tab-pane>
         <el-tab-pane label="调解与协议" name="mediation">
           <MediationPanel :data="data" @changed="load" />
+        </el-tab-pane>
+        <el-tab-pane label="失联处置" name="missing">
+          <MissingPanel :data="data" @changed="load" />
         </el-tab-pane>
         <el-tab-pane label="履行与回访" name="performance">
           <PerformancePanel :data="data" @changed="load" />
@@ -131,6 +135,7 @@ import { auth } from '../store.js'
 import { CASE_TYPES, CASE_STATUS, STATUS_TAG, URGENCY, URGENCY_TAG, CHANNEL, RISK_LABELS, RISK_TAG } from '../constants.js'
 import TriageSchedule from './panels/TriageSchedule.vue'
 import MediationPanel from './panels/MediationPanel.vue'
+import MissingPanel from './panels/MissingPanel.vue'
 import PerformancePanel from './panels/PerformancePanel.vue'
 import TransferPanel from './panels/TransferPanel.vue'
 
@@ -146,7 +151,7 @@ const TYPE_COLOR = {
   SUBMIT: '', TRIAGE: 'primary', SCHEDULE: 'primary', RESCHEDULE: 'warning',
   RECORD: '', AGREEMENT: 'success', SIGN: 'success', FACE: 'success',
   PERFORMANCE: 'success', OVERDUE: 'danger', FOLLOWUP: 'info', TRANSFER: 'warning',
-  DELIVERY: 'info', MISSING: 'danger', EVIDENCE: 'warning'
+  DELIVERY: 'info', MISSING: 'danger', MISSING_HANDLE: 'warning', CONTACT: 'primary', EVIDENCE: 'warning'
 }
 const typeOf = t => TYPE_COLOR[t] || ''
 

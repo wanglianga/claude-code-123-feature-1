@@ -44,3 +44,7 @@ temp/
 *debug*
 *temp*
 *tmp*
+
+# 业务源文件名含 "Attempt"（含子串 temp），不能被 *temp* 规则忽略
+!backend/src/main/java/cn/court/mediation/entity/ContactAttempt.java
+!backend/src/main/java/cn/court/mediation/repository/ContactAttemptRepository.java

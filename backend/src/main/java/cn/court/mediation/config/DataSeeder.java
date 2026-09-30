@@ -29,13 +29,17 @@ public class DataSeeder implements CommandLineRunner {
     private final FollowUpRepository followUpRepository;
     private final DeliveryRepository deliveryRepository;
     private final TransferMaterialRepository transferRepository;
+    private final ContactAttemptRepository contactAttemptRepository;
     private final TimelineService timelineService;
+    private final cn.court.mediation.service.TransferService transferService;
 
     public DataSeeder(UserRepository userRepository, CaseRepository caseRepository,
                       ScheduleRepository scheduleRepository, MediationRecordRepository recordRepository,
                       AgreementRepository agreementRepository, PerformancePlanRepository planRepository,
                       FollowUpRepository followUpRepository, DeliveryRepository deliveryRepository,
-                      TransferMaterialRepository transferRepository, TimelineService timelineService) {
+                      TransferMaterialRepository transferRepository,
+                      ContactAttemptRepository contactAttemptRepository, TimelineService timelineService,
+                      cn.court.mediation.service.TransferService transferService) {
         this.userRepository = userRepository;
         this.caseRepository = caseRepository;
         this.scheduleRepository = scheduleRepository;
@@ -45,7 +49,9 @@ public class DataSeeder implements CommandLineRunner {
         this.followUpRepository = followUpRepository;
         this.deliveryRepository = deliveryRepository;
         this.transferRepository = transferRepository;
+        this.contactAttemptRepository = contactAttemptRepository;
         this.timelineService = timelineService;
+        this.transferService = transferService;
     }
 
     @Override
@@ -241,15 +247,49 @@ public class DataSeeder implements CommandLineRunner {
         c9.setRespondentMissing(true);
         c9.setMissingAt(LocalDateTime.now().minusDays(15));
         c9.setRescheduleCount(2);
+        c9.setAddressVerifyRemindAt(LocalDateTime.now().minusDays(13));
+        c9.setAddressVerifiedAt(LocalDateTime.now().minusDays(12));
+        c9.setAddressVerifiedBy("王窗口");
+        c9.setVerifiedServiceAddress("本市建设里3-201（户籍地，邻居反映长期外出）");
+        c9.setOfflineServiceAt(LocalDateTime.now().minusDays(10));
+        c9.setOfflineServiceNote("直接送达（上门）；上门无人，留置送达并拍照留证");
+        c9.setMissingHandledAt(LocalDateTime.now().minusDays(12));
+        c9.setMissingTransferSuggested(true);
+        c9.setMissingTransferSuggestedAt(LocalDateTime.now().minusDays(9));
         c9.setTransferRequested(true);
         c9.setTransferReason("被申请人失联，调解无法进行");
         caseRepository.save(c9);
         timelineService.record(c9.getId(), "TRIAGE", "立案窗口完成分流", "线下调解，张调解员承办。", window);
+        // 逐条联系尝试：电话→短信→地址核验，每次结果均留痕
+        contactAttemptRepository.save(attempt(c9.getId(), "PHONE", "PHONE_CALL", "13900000000（申请方提供）",
+                "STOPPED", "拨打提示已停机", zhang, 15));
+        timelineService.record(c9.getId(), "CONTACT", "电话联系尝试（停机/空号）",
+                "方式：电话拨打；对象：13900000000（申请方提供）；结果：停机/空号；登记人：张调解员。", zhang);
+        contactAttemptRepository.save(attempt(c9.getId(), "SMS", "SMS_PLATFORM", "13900000000（申请方提供）",
+                "FAILED", "短信平台发送失败，号码无效", zhang, 15));
+        timelineService.record(c9.getId(), "CONTACT", "短信联系尝试（送达失败）",
+                "方式：短信平台；对象：13900000000（申请方提供）；结果：送达失败；登记人：张调解员。", zhang);
+        contactAttemptRepository.save(attempt(c9.getId(), "ADDRESS_CHECK", "DOOR_VISIT", "户籍地为本市但长期不在",
+                "NOT_FOUND", "户籍地走访无人应答，邻居称其外出务工半年未归", zhang, 14));
+        timelineService.record(c9.getId(), "CONTACT", "地址核验联系尝试（查无此人）",
+                "方式：现场/户籍地走访；对象：户籍地为本市但长期不在；结果：查无此人；情况：邻居称外出务工半年未归；登记人：张调解员。", zhang);
         timelineService.record(c9.getId(), "MISSING", "被申请人失联登记",
-                "电话停机、户籍地走访不在、社区反映长期外出，多种方式联系未果。", zhang);
+                "经多种方式连续联系失败（本轮已达3次），系统自动登记被申请人失联。", zhang);
+        timelineService.record(c9.getId(), "MISSING_HANDLE", "失联处置预警：请窗口核验送达地址",
+                "被申请人连续3次联系失败（电话/短信/地址核验/送达），已达阈值3次。平台提醒立案窗口核验送达地址，并可选择补充联系方式、改为线下送达或建议转立案。", null);
+        timelineService.record(c9.getId(), "MISSING_HANDLE", "窗口核验送达地址",
+                "核验人：王窗口；核验后送达地址：本市建设里3-201（户籍地，邻居反映长期外出）。", window);
+        timelineService.record(c9.getId(), "MISSING_HANDLE", "窗口决定改为线下送达",
+                "线下送达方式：直接送达（上门）；送达地址：本市建设里3-201（户籍地，邻居反映长期外出）；情况：上门无人，留置送达并拍照留证。送达尝试与结果继续登记并随卷留痕。", window);
+        contactAttemptRepository.save(attempt(c9.getId(), "SERVICE", "LEFT", "本市建设里3-201",
+                "REFUSED", "上门无人，依法留置送达，同住成年家属拒收并拍照留证", window, 10));
+        timelineService.record(c9.getId(), "CONTACT", "送达尝试联系尝试（拒绝沟通/拒收）",
+                "方式：留置送达；对象：本市建设里3-201；结果：拒绝沟通/拒收；情况：上门无人，依法留置送达并拍照留证；登记人：王窗口。", window);
+        timelineService.record(c9.getId(), "MISSING_HANDLE", "窗口建议转立案（失联）",
+                "立案窗口评估被申请人失联情形后建议转立案：电话停机、短信失败、户籍地查无此人、留置送达仍无法联系。前期全部电话/短信/地址核验/送达尝试证据已自动进入转立案材料包，逐条标明联系结果。", window);
         timelineService.record(c9.getId(), "RESCHEDULE", "第2次改期", "因被申请人无法到庭再次改期，累计2次。", zhang);
         timelineService.record(c9.getId(), "TRANSFER", "生成转立案材料包",
-                "系统自动汇编申请、分流、失联情况、改期记录等连续材料，等待立案窗口接收。", assistant);
+                "系统自动汇编申请、分流、失联情况、改期记录等连续材料，等待立案窗口接收。", window);
         DeliveryRecord d9 = new DeliveryRecord();
         d9.setCaseId(c9.getId());
         d9.setTarget("RESPONDENT");
@@ -264,10 +304,40 @@ public class DataSeeder implements CommandLineRunner {
         tm9.setCaseId(c9.getId());
         tm9.setReasonType("MISSING");
         tm9.setReasonDetail("被申请人失联，调解无法进行");
-        tm9.setMaterialList("1. 诉前调解申请书\n2. 分流意见\n3. 失联情况说明\n4. 排期/改期记录\n5. 转立案审批表");
+        tm9.setMaterialList("1. 诉前调解申请书\n2. 分流意见\n3. 失联情况说明（含4次电话/短信/地址核验/送达尝试，逐条标明结果）\n4. 排期/改期记录\n5. 转立案审批表");
         tm9.setStatus("PREPARED");
-        tm9.setPreparedBy(assistant.getId());
+        tm9.setPreparedBy(window.getId());
         transferRepository.save(tm9);
+
+        // 13) 被申请人多次联系失败刚达阈值，平台已提醒窗口核验送达地址（在办，待窗口处置）
+        MediationCase c13 = baseCase("TZ" + date(-4) + "013", CaseType.SALES, CaseStatus.MEDIATING,
+                Urgency.URGENT, "利民果蔬店", "1380000013", null, "林某（个体运输）", "1370000013",
+                "本市临时租住地（已搬离）", true, new BigDecimal("9200"), "拖欠果蔬配送货款9200元",
+                "配送签收单;微信对账;催款录音", true);
+        c13.setWindowUserId(window.getId());
+        c13.setMediatorId(li.getId());
+        c13.setChannel(Channel.ONLINE);
+        c13.setRespondentMissing(true);
+        c13.setMissingAt(LocalDateTime.now().minusDays(1));
+        c13.setAddressVerifyRemindAt(LocalDateTime.now().minusDays(1));
+        caseRepository.save(c13);
+        timelineService.record(c13.getId(), "TRIAGE", "立案窗口完成分流", "线上调解，李调解员承办。", window);
+        contactAttemptRepository.save(attempt(c13.getId(), "PHONE", "PHONE_CALL", "1370000013",
+                "NO_ANSWER", "连续两日不同时段拨打5次均无人接听", li, 3));
+        timelineService.record(c13.getId(), "CONTACT", "电话联系尝试（无人接听/未回应）",
+                "方式：电话拨打；对象：1370000013；结果：无人接听/未回应；情况：连续两日不同时段拨打5次均无人接听；登记人：李调解员。", li);
+        contactAttemptRepository.save(attempt(c13.getId(), "SMS", "SMS_PLATFORM", "1370000013",
+                "NO_ANSWER", "排期通知短信已送达但无任何回复", li, 2));
+        timelineService.record(c13.getId(), "CONTACT", "短信联系尝试（无人接听/未回应）",
+                "方式：短信平台；对象：1370000013；结果：无人接听/未回应；情况：排期通知短信已送达但无任何回复；登记人：李调解员。", li);
+        contactAttemptRepository.save(attempt(c13.getId(), "ADDRESS_CHECK", "GRID", "本市临时租住地（已搬离）",
+                "MOVED", "社区网格协查反馈其已于上月搬离，新地址不详", li, 1));
+        timelineService.record(c13.getId(), "CONTACT", "地址核验联系尝试（已搬迁、地址不详）",
+                "方式：社区网格协查；对象：本市临时租住地（已搬离）；结果：已搬迁、地址不详；情况：社区反馈上月搬离，新地址不详；登记人：李调解员。", li);
+        timelineService.record(c13.getId(), "MISSING", "被申请人失联登记",
+                "经多种方式连续联系失败（本轮已达3次），系统自动登记被申请人失联。", li);
+        timelineService.record(c13.getId(), "MISSING_HANDLE", "失联处置预警：请窗口核验送达地址",
+                "被申请人连续3次联系失败（电话/短信/地址核验/送达），已达阈值3次。平台提醒立案窗口核验送达地址，并可选择补充联系方式、改为线下送达或建议转立案。", null);
 
         // 12) 协议逾期后拒不履行，已正式转立案
         MediationCase c12 = baseCase("TZ" + date(-35) + "012", CaseType.PROPERTY_FEE, CaseStatus.TRANSFERRED,
@@ -332,6 +402,10 @@ public class DataSeeder implements CommandLineRunner {
         r11.setOutcome("FAIL");
         recordRepository.save(r11);
         timelineService.record(c11.getId(), "RECORD", "第1次调解笔录", "被申请人拒绝调解，调解终结。", li);
+
+        // 为种子中的转立案材料包回填汇编正文（含失联联系尝试逐条结果）
+        transferService.fillCompiledContent(c9.getId());
+        transferService.fillCompiledContent(c12.getId());
     }
 
     /** 协议起草→双方人脸核验→线上签署 的完整留痕 */
@@ -451,5 +525,23 @@ public class DataSeeder implements CommandLineRunner {
 
     private String date(int deltaDays) {
         return LocalDate.now().plusDays(deltaDays).format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+    }
+
+    /** 失联联系尝试种子记录（daysAgo 为尝试时间距今天数） */
+    private ContactAttempt attempt(Long caseId, String type, String channel, String target,
+                                   String result, String note, User operator, int daysAgo) {
+        ContactAttempt a = new ContactAttempt();
+        a.setCaseId(caseId);
+        a.setAttemptType(type);
+        a.setChannel(channel);
+        a.setTarget(target);
+        a.setResult(result);
+        a.setNote(note);
+        a.setOperatorId(operator.getId());
+        a.setOperatorName(operator.getRealName());
+        a.setOperatorRole(operator.getRole().name());
+        a.setAttemptTime(LocalDateTime.now().minusDays(daysAgo));
+        a.setCreatedAt(LocalDateTime.now().minusDays(daysAgo));
+        return a;
     }
 }

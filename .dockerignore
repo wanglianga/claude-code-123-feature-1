@@ -1,0 +1,7 @@
+# 构建上下文排除项
+**/node_modules
+frontend/dist
+backend/target
+.git
+*.log
+.DS_Store

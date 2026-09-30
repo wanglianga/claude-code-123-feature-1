@@ -1,0 +1,26 @@
+# 一键启动：docker compose up -d --build
+# 打开 http://localhost:8080/ （测试账号见 README）
+services:
+  court-mediation:
+    build: .
+    image: court-mediation:latest
+    container_name: court-mediation
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    # 默认 H2 内存库，免安装；如需 MySQL，取消下行注释并启用 db 服务：
+    # command: ["java","-jar","/app/mediation-platform.jar","--spring.profiles.active=mysql"]
+    # environment:
+    #   SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/court_mediation?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&createDatabaseIfNotExist=true
+    #   SPRING_DATASOURCE_USERNAME: root
+    #   SPRING_DATASOURCE_PASSWORD: root
+    # depends_on:
+    #   - db
+
+  # 可选 MySQL（默认不启动；H2 内存库已可完整体验）
+  # db:
+  #   image: mysql:8
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #   ports:
+  #     - "3306:3306"

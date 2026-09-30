@@ -78,4 +78,61 @@ export const FOLLOW_RESULTS = {
   NORMAL: '履约正常', PARTIAL: '部分履行', OVERDUE: '仍处逾期', DONE: '已履行完毕', OBJECTION: '有异议'
 }
 
+// ---------- 被申请人失联处置 ----------
+export const CONTACT_TYPES = {
+  PHONE: '电话',
+  SMS: '短信',
+  ADDRESS_CHECK: '地址核验',
+  SERVICE: '送达尝试'
+}
+
+export const CONTACT_CHANNELS = {
+  PHONE_CALL: '电话拨打',
+  SMS_PLATFORM: '短信平台',
+  DOOR_VISIT: '现场/户籍地走访',
+  GRID: '社区网格协查',
+  DIRECT: '直接送达',
+  MAIL: '邮寄送达',
+  LEFT: '留置送达',
+  ANNOUNCE: '公告送达'
+}
+
+// 各联系类型可选的具体方式
+export const CONTACT_CHANNEL_OPTIONS = {
+  PHONE: ['PHONE_CALL'],
+  SMS: ['SMS_PLATFORM'],
+  ADDRESS_CHECK: ['DOOR_VISIT', 'GRID'],
+  SERVICE: ['DIRECT', 'MAIL', 'LEFT', 'ANNOUNCE']
+}
+
+export const CONTACT_RESULTS = {
+  CONNECTED: '已联系上',
+  DELIVERED: '已送达签收',
+  NO_ANSWER: '无人接听/未回应',
+  STOPPED: '停机/空号',
+  REFUSED: '拒绝沟通/拒收',
+  NOT_FOUND: '查无此人',
+  MOVED: '已搬迁、地址不详',
+  FAILED: '送达失败'
+}
+
+// 成功类结果（绿色）与失败类结果（红/灰色）
+export const CONTACT_RESULT_TAG = {
+  CONNECTED: 'success',
+  DELIVERED: 'success',
+  NO_ANSWER: 'info',
+  STOPPED: 'danger',
+  REFUSED: 'danger',
+  NOT_FOUND: 'danger',
+  MOVED: 'warning',
+  FAILED: 'danger'
+}
+
+export const OFFLINE_WAYS = {
+  DIRECT: '直接送达（上门）',
+  MAIL: '邮寄送达',
+  LEFT: '留置送达',
+  ANNOUNCE: '公告送达'
+}
+
 export const hasRole = (user, ...roles) => roles.includes(user?.role)

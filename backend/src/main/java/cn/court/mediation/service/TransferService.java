@@ -30,13 +30,16 @@ public class TransferService {
     private final FollowUpRepository followUpRepository;
     private final DeliveryRepository deliveryRepository;
     private final FaceVerificationRepository faceRepository;
+    private final ContactAttemptRepository contactAttemptRepository;
     private final TimelineService timelineService;
 
     public TransferService(TransferMaterialRepository transferRepository, CaseRepository caseRepository,
                            TimelineRepository timelineRepository, MediationRecordRepository recordRepository,
                            AgreementRepository agreementRepository, PerformancePlanRepository planRepository,
                            FollowUpRepository followUpRepository, DeliveryRepository deliveryRepository,
-                           FaceVerificationRepository faceRepository, TimelineService timelineService) {
+                           FaceVerificationRepository faceRepository,
+                           ContactAttemptRepository contactAttemptRepository,
+                           TimelineService timelineService) {
         this.transferRepository = transferRepository;
         this.caseRepository = caseRepository;
         this.timelineRepository = timelineRepository;
@@ -46,6 +49,7 @@ public class TransferService {
         this.followUpRepository = followUpRepository;
         this.deliveryRepository = deliveryRepository;
         this.faceRepository = faceRepository;
+        this.contactAttemptRepository = contactAttemptRepository;
         this.timelineService = timelineService;
     }
 
@@ -86,7 +90,13 @@ public class TransferService {
             materials.add("7. 履行回访记录");
         }
         materials.add("8. 电子送达记录");
-        if (Boolean.TRUE.equals(c.getRespondentMissing())) {
+        List<ContactAttempt> contacts = contactAttemptRepository.findByCaseIdOrderByAttemptTimeAsc(caseId);
+        if (!contacts.isEmpty()) {
+            long contactFailed = contacts.stream()
+                    .filter(a -> !List.of("CONNECTED", "DELIVERED").contains(a.getResult())).count();
+            materials.add("9. 被申请人联系尝试及失联处置记录（共" + contacts.size() + "次，其中失败"
+                    + contactFailed + "次，逐条标明电话/短信/地址核验/送达结果）");
+        } else if (Boolean.TRUE.equals(c.getRespondentMissing())) {
             materials.add("9. 被申请人失联情况说明及联系过程记录");
         }
         materials.add("10. 转立案审批表");
@@ -188,9 +198,23 @@ public class TransferService {
         return text;
     }
 
+    /** 为已存在的转立案材料包回填汇编正文（种子数据/历史数据使用），不产生新的时间线 */
+    @Transactional
+    public void fillCompiledContent(Long caseId) {
+        TransferMaterial tm = transferRepository.findByCaseId(caseId).orElse(null);
+        if (tm == null) {
+            return;
+        }
+        MediationCase c = caseRepository.findById(caseId).orElseThrow(() -> new BizException("案件不存在"));
+        List<TimelineEvent> events = timelineRepository.findByCaseIdOrderByCreatedAtAsc(caseId);
+        tm.setCompiledContent(buildCompiledDossier(c, tm.getReasonType(),
+                tm.getReasonDetail() == null ? "" : tm.getReasonDetail(), events));
+        transferRepository.save(tm);
+    }
+
     /** 汇编连续过程材料卷宗（同时供转立案与“提交法官”使用） */
-    public String buildCompiledDossier(MediationCase c, String reasonType, String reasonDetail, List<TimelineEvent> events) {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    public String buildCompiledDossier(MediationCase c, String reasonType, String reasonDetail, List<TimelineEvent> events) {        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        List<ContactAttempt> contacts = contactAttemptRepository.findByCaseIdOrderByAttemptTimeAsc(c.getId());
         StringBuilder sb = new StringBuilder();
         sb.append("════════════════════════════════════════\n");
         sb.append("      诉前调解连续过程材料卷（随案移交法官）\n");
@@ -203,9 +227,33 @@ public class TransferService {
         sb.append("证据清单：\n").append(c.getEvidenceList() == null ? "（无）" : c.getEvidenceList()).append("\n\n");
 
         sb.append("【分流情况】\n").append(c.getTriageOpinion() == null ? "（无）" : c.getTriageOpinion()).append("\n");
-        sb.append("失联情况：").append(Boolean.TRUE.equals(c.getRespondentMissing()) ? "曾登记失联" : "无")
+        sb.append("失联情况：").append(Boolean.TRUE.equals(c.getRespondentMissing()) ? "当前处于失联状态"
+                        : (c.getMissingAt() != null || !contacts.isEmpty() ? "曾登记失联（已恢复/处置中）" : "无"))
                 .append("；材料缺件：").append(Boolean.FALSE.equals(c.getEvidenceComplete()) ? "未补齐：" + c.getEvidenceGapNote() : "已齐备")
-                .append("；改期次数：").append(c.getRescheduleCount()).append("\n\n");
+                .append("；改期次数：").append(c.getRescheduleCount()).append("\n");
+        if (!contacts.isEmpty()) {
+            long failed = contacts.stream().filter(a -> !List.of("CONNECTED", "DELIVERED").contains(a.getResult())).count();
+            sb.append("失联联系尝试：共").append(contacts.size()).append("次，失败").append(failed)
+                    .append("次（详见下方《失联联系尝试记录》）\n");
+        }
+        if (c.getAddressVerifiedAt() != null || c.getOfflineServiceAt() != null || Boolean.TRUE.equals(c.getMissingTransferSuggested())) {
+            sb.append("窗口处置：");
+            if (c.getAddressVerifiedAt() != null) {
+                sb.append("已于").append(c.getAddressVerifiedAt().toLocalDate()).append("由")
+                        .append(nz(c.getAddressVerifiedBy())).append("核验送达地址（")
+                        .append(nz(c.getVerifiedServiceAddress())).append("）；");
+            }
+            if (c.getOfflineServiceAt() != null) {
+                sb.append("已于").append(c.getOfflineServiceAt().toLocalDate()).append("改为线下送达（")
+                        .append(nz(c.getOfflineServiceNote())).append("）；");
+            }
+            if (Boolean.TRUE.equals(c.getMissingTransferSuggested())) {
+                sb.append("窗口已建议转立案").append(c.getMissingTransferSuggestedAt() == null ? "" : "（" + c.getMissingTransferSuggestedAt().toLocalDate() + "）")
+                        .append("；");
+            }
+            sb.append("\n");
+        }
+        sb.append("\n");
 
         List<MediationRecord> records = recordRepository.findByCaseIdOrderByRoundNoDescCreatedAtDesc(c.getId());
         sb.append("【调解笔录】（共").append(records.size()).append("次）\n");
@@ -249,6 +297,30 @@ public class TransferService {
             for (FollowUp f : fus) {
                 sb.append(f.getFollowUpDate()).append(" ").append(f.getOperatorName()).append("：")
                         .append(f.getResult()).append(" ").append(nz(f.getNote())).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        if (!contacts.isEmpty()) {
+            sb.append("【失联联系尝试记录】（共").append(contacts.size()).append("次，随卷证明已穷尽电话/短信/地址核验/送达等联系手段）\n");
+            DateTimeFormatter attemptFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            int idx = 1;
+            for (ContactAttempt a : contacts) {
+                sb.append(idx++).append(". ").append(a.getAttemptTime() == null ? "—" : a.getAttemptTime().format(attemptFmt))
+                        .append(" ").append(MissingHandleService.attemptTypeLabel(a.getAttemptType()))
+                        .append("｜方式：").append(MissingHandleService.channelLabel(a.getAttemptType(), a.getChannel()));
+                if (a.getTarget() != null && !a.getTarget().isBlank()) {
+                    sb.append("｜对象：").append(a.getTarget());
+                }
+                sb.append("｜结果：").append(MissingHandleService.resultLabel(a.getResult()));
+                if (a.getNote() != null && !a.getNote().isBlank()) {
+                    sb.append("｜情况：").append(a.getNote());
+                }
+                sb.append("｜登记人：").append(a.getOperatorName() == null ? "—" : a.getOperatorName()).append("\n");
+            }
+            List<DeliveryRecord> deliveries = deliveryRepository.findByCaseIdOrderBySentAtDesc(c.getId());
+            if (!deliveries.isEmpty()) {
+                sb.append("附：电子/线下送达记录共").append(deliveries.size()).append("条（详见时间线 DELIVERY 记录）。\n");
             }
             sb.append("\n");
         }
